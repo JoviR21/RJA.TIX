@@ -1,0 +1,274 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name     String
+  email    String @unique
+  password String
+
+  admin    Admin?
+  manager  Manager?
+  referral Referral?
+  wallet   Wallet?
+
+  points   Point[]
+  vouchers Voucher[]
+  bookings Booking[]
+  tickets  Ticket[]
+  reviews  Review[]
+}
+
+model Admin {
+  id        String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [id], references: [id], onDelete: Cascade)
+}
+
+model Manager {
+  id        String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User    @relation(fields: [id], references: [id], onDelete: Cascade)
+  cinemaId Int?
+  cinema   Cinema? @relation(fields: [cinemaId], references: [id], onDelete: SetNull)
+}
+
+model Referral {
+  id        String    @id
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  vouchers  Voucher[]
+  user      User      @relation(fields: [id], references: [id], onDelete: Cascade)
+}
+
+model Point {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expiredAt DateTime
+  points    Int      @default(10000)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paymentId Int?
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+model Voucher {
+  id         Int       @id @default(autoincrement())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  expiredAt  DateTime
+  discount   Int // Percent discount
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referralId String?
+  referral   Referral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  paymentId  Int?
+  payment    Payment?  @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+}
+
+model AdminVoucher {
+  id           String    @id
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  expiredAt    DateTime
+  discount     Int // Percent discount
+  availability Int
+  payment      Payment[]
+}
+
+model Wallet {
+  id        String    @id
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  balance   Int       @default(100000)
+  payments  Payment[]
+  user      User      @relation(fields: [id], references: [id], onDelete: Cascade)
+}
+
+model Cinema {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name     String
+  studios  Studio[]
+  address  String
+  managers Manager[]
+
+  @@unique([name, address], name: "uniqueCinema")
+}
+
+model Studio {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  number     Int
+  cinemaId   Int
+  cinema     Cinema     @relation(fields: [cinemaId], references: [id], onDelete: Cascade)
+  seats      Seat[]
+  showtimes  Showtime[]
+  studioType StudioType @default(STARIUM)
+  price      Int        @default(30000)
+
+  @@unique([cinemaId, number])
+}
+
+model Seat {
+  row      Int
+  column   Int
+  studioId Int
+  studio   Studio    @relation(fields: [studioId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@id([studioId, row, column])
+}
+
+model Movie {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  title       String
+  director    String
+  genre       Genre
+  synopsis    String?    @db.VarChar(1000)
+  rated       Rated
+  duration    Int // duration in minutes
+  releaseYear Int        @db.Year
+  posterUrl   String?
+  showtimes   Showtime[]
+  reviews     Review[]
+
+  @@unique([title, director, genre, releaseYear], name: "uniqueMovie")
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId  String
+  movieId Int
+  movie   Movie  @relation(fields: [movieId], references: [id], onDelete: Cascade)
+  user    User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  review  String
+  star    Int
+
+  @@unique([userId, movieId], name: "uniqueReview")
+}
+
+model Showtime {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  startTime DateTime
+  movieId   Int
+  movie     Movie     @relation(fields: [movieId], references: [id])
+  studioId  Int
+  studio    Studio    @relation(fields: [studioId], references: [id])
+  bookings  Booking[]
+
+  @@unique([startTime, studioId], name: "uniqueShowtime")
+}
+
+model Booking {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  showtimeId Int
+  showtime   Showtime @relation(fields: [showtimeId], references: [id])
+  row        Int
+  column     Int
+  studioId   Int
+  seat       Seat     @relation(fields: [studioId, row, column], references: [studioId, row, column])
+  ticketId   Int
+  ticket     Ticket   @relation(fields: [ticketId], references: [id])
+
+  @@unique([studioId, row, column, showtimeId], name: "uniqueSeatShowtime")
+  @@index([studioId, row, column], name: "seatIndex")
+}
+
+model Ticket {
+  id        Int       @id @default(autoincrement())
+  userId    String
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id])
+  bookings  Booking[]
+  payment   Payment?
+}
+
+model Payment {
+  id             Int           @id @default(autoincrement())
+  paymentDate    DateTime
+  ticketId       Int           @unique
+  ticket         Ticket        @relation(fields: [ticketId], references: [id])
+  paymentStatus  Boolean       @default(false)
+  voucher        Voucher[]
+  point          Point[]
+  wallet         Wallet?       @relation(fields: [walletId], references: [id], onDelete: SetNull)
+  walletId       String?
+  adminVoucherId String?
+  adminVoucher   AdminVoucher? @relation(fields: [adminVoucherId], references: [id], onDelete: SetNull)
+  totalPayment   Int
+}
+
+enum StudioType {
+  STARIUM
+  PRIVATE_BOX
+  FOUR_DX
+  GOLD_CLASS
+  SPHERE
+}
+
+enum Genre {
+  ACTION
+  ADVENTURE
+  ANIMATION
+  COMEDY
+  CRIME
+  DOCUMENTARY
+  DRAMA
+  FAMILY
+  FANTASY
+  HISTORY
+  HORROR
+  MUSIC
+  MYSTERY
+  ROMANCE
+  SCI_FI
+  SPORT
+  THRILLER
+}
+
+enum Rated {
+  G
+  PG
+  PG_13
+  R
+  NC_17
+}
